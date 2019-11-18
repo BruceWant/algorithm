@@ -1,6 +1,6 @@
 
 
-
+PDEVICE_OBJECT gSFilterControlDeviceObject;
 
 NTSTATUS
 DriverEntry (
@@ -8,6 +8,7 @@ DriverEntry (
 	_In_ PUNICODE_STRING RegistryPath
 )
 {
+	PFAST_IO_DISPATH fastIoDispatch; 
 	NTSTATUS status = STATUS_SUCCESS;
 	UNICODE_STRING nameString;
 	RtlInitUnicodeString( &nameString,
@@ -27,6 +28,39 @@ DriverEntry (
 			 "status=%08x\n", &nameString, status));
 	}
 
+	fastIoDispatch = ExAllocatePoolWithTag(
+			NonPagedPool,
+			sizeof( FAST_IO_DISPATH),
+			SFLT_POOL_TAG);
+	if (!fastIoDispatch)
+	{
+		IoDeleteDevice(gSFilterControlDeviceObject);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	RtlZeroMemory(fastIoDispatch, sizeof(FAST_IO_DISPATCH));
+	fastIoDispatch->SizeOfFastIoDispath = sizeof(FAST_IO_DISPATCH);
+
+
+	fastIoDispatch->FastIoCheckIfPossible = SfFastIoCheckIfPossible;
+	fastIoDispatch->FastIoRead = SfFastIoRead;
+	fastIoDispatch->FastIoWrite = SfFastIoWrite;
+	fastIoDispatch->FastIoQueryBasicInfo = SfFastIoQueryBasicInfo;
+	fastIoDispatch->
+
 
 	return status;
+}
+
+
+
+NTSTATUS
+SfPassThrough (
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PIRP Irp
+	)
+{
+	IoSkipCurrentIrpStackLocation(Irp);
+	return IoCallDriver(some_AttachedToDeviceObject,
+			     Irp);
 }
