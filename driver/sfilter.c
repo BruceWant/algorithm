@@ -47,6 +47,17 @@ DriverEntry(
 			" \"%wZ\", status=%08x\n", &))
 	}
 
+	for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
+	{
+		DriverObject->MajorFunction[i] = SfPassThrough;
+	}
+
+	DriverObject->MajorFunction[IRP_MJ_CREATE] = SfCreate;
+
+	DriverObject->MajorFunction[IRP_MJ_FILE_SYSTEM_CONSTROL] = SfFsControl;
+	DriverObject->MajorFunction[IRP_MJ_CLEANUP] = SfCleanupClose;
+	DriverObject->MajorFunction[IRP_MJ_CLOSE] = SfCleanupClose;
+
 	fastIoDispatch = ExAllocatePoolWithTag(
 		NonPagedPool,
 		sizeof(FAST_IO_DISPATCH),
