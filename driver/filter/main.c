@@ -1,9 +1,10 @@
 #include "./lib/include/fsapi.h"
+#include "./lib/include/dyndat.h"
 
 DRIVER_INITIALIZE DriverEntry;
 DRIVER_UNLOAD DriverUnload;
-_Dispatch_type_(IRP_MJ_CREATE) DRIVER_DISPATCH FsDispatchCreate;
-_Dispatch_type_(IRP_MJ_CLOSE) DRIVER_DISPATCH FsDispatchClose;
+_Dispatch_type_(IRP_MJ_CREATE) DRIVER_DISPATCH CFsDispatchCreate;
+_Dispatch_type_(IRP_MJ_CLOSE) DRIVER_DISPATCH CFsDispatchClose;
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE, DriverEntry)
@@ -22,7 +23,7 @@ NTSTATUS DriverEntry(
 	
 	FsDriverObject = DriverObject;
 
-	RtlInitUnicodeString(&deviceName, FS_DEVICE_NAME);
+	RtlInitUnicodeString(&deviceName, CFS_DEVICE_NAME);
 
 	status = IoCreateDevice(
 		DriverObject,
@@ -40,10 +41,10 @@ NTSTATUS DriverEntry(
 	FsDeviceObject = deviceObject;
 
 	// Set up I/O.
-	DriverObject->MajorFunction[IRP_MJ_CREATE] = FsDispatchCreate;
-	DriverObject->MajorFunction[IRP_MJ_CLOSE] = FsDispatchClose;
+	DriverObject->MajorFunction[IRP_MJ_CREATE] = CFsDispatchCreate;
+	DriverObject->MajorFunction[IRP_MJ_CLOSE] = CFsDispatchClose;
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONSTROL] =
-		FsDispatchDeviceControl;
+		CFsDispatchDeviceControl;
 	DriverObject->DriverUnload = DriverUnload;
 
 	deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
@@ -64,7 +65,7 @@ VOID DriverUnload(
 	KdPrint(("Driver unloaded\n"));
 }
 
-NTSTATUS FsDispatchCreate(
+NTSTATUS CFsDispatchCreate(
 	_In_ PDEVICE_OBJECT DeviceObject,
 	_Inout_ PIRP Irp
 	)
