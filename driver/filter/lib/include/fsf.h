@@ -1,6 +1,7 @@
 #ifndef FSF_H
 #define FSF_H
 
+#include "fsapi.h"
 
 typedef struct _KPH_CLIENT
 {
@@ -18,8 +19,8 @@ typedef struct _KPH_CLIENT
 	PVOID VerifiedRangeBase;
 	SIZE_T VerifiedRangeSize;
 	FAST_MUTEX KeyBackoffMutex;
-	KPH_KEY L1Key;
-	KPH_KEY L2Key;
-} KPH_CLIENT, *PKPH_CLIENT;
+	//KPH_KEY L1Key;
+	//KPH_KEY L2Key;
+} KPH_CLIENT, * PKPH_CLIENT;
 
 #endif
