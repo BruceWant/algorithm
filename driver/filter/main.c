@@ -49,6 +49,7 @@ NTSTATUS DriverEntry(
 	UNICODE_STRING deviceName;
 	UNICODE_STRING symbolicName;
 	PDEVICE_OBJECT deviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
 	ULONG i;
 
 #if WINVER >= 0X0501
@@ -101,6 +102,90 @@ NTSTATUS DriverEntry(
 	DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] =
 		CFsDispatchDeviceControl;
 	DriverObject->DriverUnload = DriverUnload;
+
+	fastIoDispatch = ExAllocatePoolWithTag(
+				NonPagedPool,
+				sizeof(FAST_IO_DISPATCH),
+				CFS_POOL_TAG);
+	if (!fastIoDispatch) {
+		IoDeleteDevice(CFsDeviceObject);
+		return STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	RtlZeroMemory(fastIoDispatch, sizeof(FAST_IO_DISPATCH));
+
+	fastIoDispatch->SizeOfFastIoDispatch = sizeof(FAST_IO_DISPATCH);
+	fastIoDispatch->FastIoCheckIfPossible = SfFastIoCheckIfPossible;
+	fastIoDispatch->FastIoRead = SfFastIoRead;
+	fastIoDispatch->FastIoWrite = SfFastIoWrite;
+	fastIoDispatch->FastIoQueryBasicInfo = SfFAstIoQueryBasicInfo;
+	fastIoDispatch->FastIoQueryStandardInfo =
+		SfFastIoQueryStandardInfo;
+	fastIoDispatch->FastIoLock = SfFastIoLock;
+	fastIoDispatch->FastIoUnlockSingle = SfFastIoUnlockSingle;
+	fastIoDispatch->FastIoUnlockAll = SfFastIoUnlockAll;
+	fastIoDispatch->FastIoUnlockAllByKey = SfFastIoUnlockAllByKey;
+	fastIoDispatch->FastIoDeviceControl = SfFastIoDeviceControl;
+	fastIoDispatch->FastIoDetachDevice = SfFastIoDetachDevice;
+	fastIoDispatch->FastIoQueryNetworkOpenInfo =
+		SfFastIoQueryNetworkOpenInfo;
+	fastIoDispatch->MdlRead = SfFastIoMdlRead;
+	fastIoDispatch->MdlReadComplete = SfFastIoMdlReadComplete;
+	fastIoDispatch->PrePareMdlWrite = SfFAstIoPrepareMdlWrite;
+	fastIoDispatch->MdlWriteComplete = SfFastIoMdlWriteComplete;
+	fastIoDispatch->FastIoReadCompressed = SfFastIoReadcompressed;
+	fastIoDispatch->FastIoWriteCompressed = SfFastIoWriteCompressed;
+	fastIoDispatch->MdlReadCompleteCompressed = 
+		SfFastIOMdlReadCompleteCompressed;
+	fastIoDispatch->MdlWriteCompleteCompressed =
+		SfFastIoMdlWriteCompleteCompressed;
+	fastIoDispatch->FastIoQueryOpen = SfFastIoQueryOpen;
+	
+	DriverObject->FastIoDispatch = fastIoDispatch;
+
+#if WINVER >= 0x0501
+	FS_FILETER_CALLBACKS CFsFilterCallbacks;
+
+	if (NULL != CFsDynamicFunctions.RegisterFileSystemFilterCallbacks) {
+		CFsFilterCallbacks.SizeOfFsFilterCallbacks =
+			sizeof(FS_FILTER_CALLBACKS);
+		CFsFilterCallbacks.PreAcquireForSectionSynchronization =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostAcquireForSectionSynchronization =
+			CFsPostFsFilterPassThrough;
+		CFsFilterCallbacks.PreReleaseForSectionSynchronization =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostReleaseForSectionSynchronization =
+			CFsPostFsFilterPassThrough;
+		CFsFilterCallbacks.PreAcquireForCcFlush =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostAcquireForCcFlush =
+			CFsPostFsFilterPassThrough;
+		CFsFilterCallbacks.PreReleaseForCcFlush =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostReleaseForCcFlush =
+			CFsPostFsFilterPassThrough;
+		CFsFilterCallbacks.PreAcquireForModifiedPageWriter =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostAccquireForModifiedPPageWriter =
+			CFsPostFsFilterPassThrough;
+		CFsFilterCallbacks.PreReleaseForModifiedPageWriter =
+			CFsPreFsFilterPassThrough;
+		CFsFilterCallbacks.PostReleaseForModifiedPageWriter =
+			CFsPostFsFilterPassThrough;
+
+		status = (CFsDynamicFunctions.
+					RegisterFileSystemFilterCallbacks)
+			(DriverObject,
+			&CFsFilterCallbacks);
+		if (!NT_SUCCESS(status)) {
+			DriverObject->FastIoDispatch = NULL;
+			ExFreePool(fastIoDispatch);
+			IoDeleteDevice(CFsDeviceObject);
+			return status;
+		}
+	}
+#endif
 
 	deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
 
