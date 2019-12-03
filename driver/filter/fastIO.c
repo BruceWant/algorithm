@@ -504,3 +504,215 @@ BOOLEAN SfFastIoQueryNetworkOpenInfo(
 	}
 	return FALSE;
 }
+
+
+BOOLEAN SfFastIoMdlRead(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ PLARGE_INTEGER FileOffset,
+	_In_ ULONG Length,
+	_In_ ULONG LockKey,
+	_Out_ PMDL* MdlChain,
+	_Out_ PIO_STATUS_BLOCK IoStatus,
+_In_ PDEVICE_OBJECT DeviceObject
+)
+{
+PDEVICE_OBJECT nextDeviceObject;
+PFAST_IO_DISPATCH fastIoDispatch;
+
+PAGED_CODE();
+
+return FALSE;
+
+if (DeviceObject->DeviceExtension) {
+	ASSSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+	nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+		DeviceObject->DeviceExtension)->
+		AttachedToDeviceObject;
+	ASSERT(nextDeviceObject);
+
+	fastIoDispatch = nextDeviceObject->DriverObject->
+		FastIoDispatch;
+
+	if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+		MdlRead)) {
+		return (fastIoDispatch->MdlRead)(
+			FileObject,
+			FileOffset,
+			Length,
+			LockKey,
+			MdlChain,
+			IoStatus,
+			nextDeviceObject
+			);
+	}
+}
+return FALSE;
+}
+
+BOOLEAN SfFastIoMdlReadComplete(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ PMDL MdlChain,
+	_In_ PDEVICE_OBJECT DeviceObject
+)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+			DeviceObject->DeviceExtension)->AttachedToDeviceObject;
+		ASSERT(nextDeviceObject);
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+			FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+			MdlReadcomplete)) {
+			return (fastIoDispatch->MdlReadComplete)(
+				FileObject,
+				MdlChain,
+				nextDeviceObject
+				);
+		}
+	}
+	return FALSE;
+}
+
+
+BOOLEAN SfFastIoPrepareMdlWrite(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ PLARGE_INTEGER FileOffset,
+	_In_ ULONG Length,
+	_In_ ULONG LockKey,
+	_Out_ PMDL* MdlChain,
+	_Out_ PIO_STATUS_BLOCK IoStatus,
+	_In_ PDEVICE_OBJECT DeviceObject
+)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+			DeviceObject->DeviceExtension)->
+			AttachedToDeviceObject;
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+			FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+			PrepareMdlWrite)) {
+			return (fastIoDispatch->PrepareMdlWrite)(
+				FileObject,
+				FileOffset,
+				Length,
+				LockKey,
+				MdlChain,
+				IoStatus,
+				nextDeviceObject);
+		}
+	}
+	return FALSE;
+}
+
+
+BOOLEAN SfFastIoMdlWriteComplete(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ PLARGE_INTEGER FileOffset,
+	_In_ PMDL MdlChain,
+	_In_ PDEVICE_OBJECT DeviceObject
+)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+			DeviceObject->DeviceExtension)->
+			AttachedToDeviceObject;
+		ASSERT(nextDeviceObject);
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+			FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+			MdlWriteComplete)) {
+			return (fastIoDispatch->MdlWriteComplete)(
+				FileObject,
+				FileOffset,
+				MdlChain,
+				nextDeviceObject
+				);
+		}
+	}
+	return FALSE;
+}
+
+
+BOOLEAN SfFastIoReadCompressed(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ PLARGE_INTEGER FileOffset,
+	_In_ ULONG Length,
+	_In_ ULONG LockKey,
+	_Out_ PVOID Buffer,
+	_Out_ PMDL* MdlChain,
+	_Out_ PIO_STATUS_BLOCK IoStatus,
+	_Out_ struct _COMPRESSED_DATA_INFO* CompressedDataInfo,
+	_In_ ULONG CompressedDataInfoLength,
+	_In_ PDEVICE_OBJECT DeviceObject
+)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+			DeviceObject->DeviceExtension)->
+			AttachedToDeviceObject
+			ASSERT(nextDeviceObject);
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+			FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+			FastIOReadCompressed)) {
+			return (fastIoDispatch->FastIoReadCompressed)(
+				FileObject,
+				FileOffset,
+				Length,
+				LockKey,
+				Buffer,
+				MdlChain,
+				IoStatus,
+				CompressedDataInfo,
+				CompressedDataInfoLength,
+				nextDeviceObject
+				);
+		}
+	}
+	return FALSE;
+}
