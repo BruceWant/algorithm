@@ -353,3 +353,154 @@ BOOLEAN SfFastIoUnlockAll(
 	}
 	return FALSE;
 }
+
+
+BOOLEAN SfFastIoUnlockAllByKey (
+		_In_ PFILE_OBJECT FileObject,
+		PVOID ProcessId,
+		ULONG Key,
+		_Out_ PIO_STATUS_BLOCK IoStatus,
+		_In_ PDEVICE_OBJECT DeviceObject
+		)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+					DeviceObject->DeviceExtension)->
+						AttachedToDeviceObject;
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+							FastIoDispatch;
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+						   FastIoUnlockAllByKey)){
+			return (fastIoDispatch->FastIoUnlockAllByKey)(
+					FileObject,
+					ProcessId,
+					Key,
+					IoStatus,
+					nextDeviceObject);
+		}
+	}
+	return FALSE;
+}
+
+
+BOOLEAN SfFastIoDeviceControl(
+		_In_ PFILE_OBJECT FileObject,
+		_In_ BOOLEAN Wait,
+		_In_ PVOID InputBuffer OPTIONAL,
+		_In_ ULONG InputBufferLength,
+		_Out_ PVOID OutputBuffer OPTIONAL,
+		_In_ ULONG OutputBufferLength,
+		_In_ ULONG IoControlCode,
+		_Out_ PIO_STATUS_BLOCK IoStatus,
+		_In_ PDEVICE_OBJECT DeviceObject
+		)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	if (IS_MY_CONTROL_DEVICE_OBJECT(DeviceObject))
+		return FALSE;
+	if (!IS_MY_DEVICE_OBJECT(DeviceObject))
+		return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+					DeviceObject->DeviceExtension)->
+						AttachedToDeviceObject;
+		ASSERT(nextDeviceObject);
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+							FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+						   FastIoDeviceControl)) {
+			return (fastIoDispatch->FastIoDeviceControl)(
+					FileObject,
+					Wait,
+					InputBuffer,
+					InputBufferLength,
+					OutputBuffer,
+					OutputBufferLength,
+					IoControlCode,
+					IoStatus,
+					nextDeviceObject
+					);
+		}
+	}
+	return FALSE;
+}
+
+
+VOID SfFastIoDetachDevice(
+		_In_ PDEVICE_OBJECT SourceDevice,
+		_In_ PDEVICE_OBJECT TargetDevice
+		)
+{
+	PSFILTER_DEVICE_EXTENSION devExt;
+
+	PAGED_CODE();
+
+	ASSERT(IS_MY_DEVICE_OBJECT(SourceDevice));
+
+	devExt = SourceDevice->DeviceExtension;
+
+	SfCleanupMountedDevice(SourceDevice);
+	IoDetachDevice(TargetDevice);
+	IoDeleteDevice(SourceDevice);
+}
+
+
+BOOLEAN SfFastIoQueryNetworkOpenInfo(
+		_In_ PFILE_OBJECT FileObject,
+		_In_ BOOLEAN Wait,
+		_Out_ PFILE_NETWORK_OPEN_INFORMATION Buffer,
+		_Out_ PIO_STATUS_BLOCK IoStatus,
+		_In_ PDEVICE_OBJECT DeviceObject
+		)
+{
+	PDEVICE_OBJECT nextDeviceObject;
+	PFAST_IO_DISPATCH fastIoDispatch;
+
+	PAGED_CODE();
+
+	return FALSE;
+
+	if (DeviceObject->DeviceExtension) {
+		ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+		nextDeviceObject = ((PSFILTER_DEVICE_EXTENSION)
+					DeviceObject->DeviceExtension)->
+						AttachedToDeviceObject;
+
+		ASSERT(nextDeviceObject);
+
+		fastIoDispatch = nextDeviceObject->DriverObject->
+							FastIoDispatch;
+
+		if (VALID_FAST_IO_DISPATCH_HANDLER(fastIoDispatch,
+					FastIoQueryNetworkOpenInfo)) {
+			return (fastIoDispatch->FastIoQueryNetworkOpenInfo)(
+					FileObject,
+					Wiat,
+					Buffer,
+					IoStatus,
+					nextDeviceObject
+					);
+		}
+	}
+	return FALSE;
+}
