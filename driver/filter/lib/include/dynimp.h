@@ -3,8 +3,8 @@
 
 #include "fsapi.h"
 
-extern gCFsOsMajorVersion;
-extern gCFsOsMinorVersion;
+//extern gCFsOsMajorVersion;
+//extern gCFsOsMinorVersion;
 
 typedef NTSTATUS(*PCFS_REGISTER_FILE_SYSTEM_FILTER_CALLBACKS) (
 	_In_ PDRIVER_OBJECT DriverObject,

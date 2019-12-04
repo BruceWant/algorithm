@@ -89,12 +89,12 @@ VOID CFsGetCurrentVersion(
 		gCFsOsMajorVersion = versionInfo.dwMajorVersion;
 		gCFsOsMinorVersion = versionInfo.dwMinorVersion;
 	}
-	else {
+	/*else {
 		PsGetVersion(&gCFsOsMajorVersion,
 			&gCFsOsMinorVersion,
 			NULL,
 			NULL);
-	}
+	}*/
 }
 
 

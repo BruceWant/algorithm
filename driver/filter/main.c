@@ -2,16 +2,15 @@
 #include "./include/dyndata.h"
 
 
-PDRIVER_OBJECT CFsDriverObject;
 
-PDEVICE_OBJECT CFsDeviceObject;
+
+
 
 FAST_MUTEX CFsFilterAttachLock;
 
 ULONG SfDebug = 0;
 
-ULONG gCFsOsMajorVersion;
-ULONG gCFsOsMinorVersion;
+
 
 DRIVER_INITIALIZE DriverEntry;
 DRIVER_UNLOAD DriverUnload;
@@ -118,7 +117,7 @@ NTSTATUS DriverEntry(
 	fastIoDispatch->FastIoCheckIfPossible = SfFastIoCheckIfPossible;
 	fastIoDispatch->FastIoRead = SfFastIoRead;
 	fastIoDispatch->FastIoWrite = SfFastIoWrite;
-	fastIoDispatch->FastIoQueryBasicInfo = SfFAstIoQueryBasicInfo;
+	fastIoDispatch->FastIoQueryBasicInfo = SfFastIoQueryBasicInfo;
 	fastIoDispatch->FastIoQueryStandardInfo =
 		SfFastIoQueryStandardInfo;
 	fastIoDispatch->FastIoLock = SfFastIoLock;
@@ -131,12 +130,12 @@ NTSTATUS DriverEntry(
 		SfFastIoQueryNetworkOpenInfo;
 	fastIoDispatch->MdlRead = SfFastIoMdlRead;
 	fastIoDispatch->MdlReadComplete = SfFastIoMdlReadComplete;
-	fastIoDispatch->PrePareMdlWrite = SfFAstIoPrepareMdlWrite;
+	fastIoDispatch->PrepareMdlWrite = SfFastIoPrepareMdlWrite;
 	fastIoDispatch->MdlWriteComplete = SfFastIoMdlWriteComplete;
-	fastIoDispatch->FastIoReadCompressed = SfFastIoReadcompressed;
+	fastIoDispatch->FastIoReadCompressed = SfFastIoReadCompressed;
 	fastIoDispatch->FastIoWriteCompressed = SfFastIoWriteCompressed;
 	fastIoDispatch->MdlReadCompleteCompressed = 
-		SfFastIOMdlReadCompleteCompressed;
+		SfFastIoMdlReadCompleteCompressed;
 	fastIoDispatch->MdlWriteCompleteCompressed =
 		SfFastIoMdlWriteCompleteCompressed;
 	fastIoDispatch->FastIoQueryOpen = SfFastIoQueryOpen;
@@ -144,7 +143,7 @@ NTSTATUS DriverEntry(
 	DriverObject->FastIoDispatch = fastIoDispatch;
 
 #if WINVER >= 0x0501
-	FS_FILETER_CALLBACKS CFsFilterCallbacks;
+	FS_FILTER_CALLBACKS CFsFilterCallbacks;
 
 	if (NULL != CFsDynamicFunctions.RegisterFileSystemFilterCallbacks) {
 		CFsFilterCallbacks.SizeOfFsFilterCallbacks =
@@ -167,7 +166,7 @@ NTSTATUS DriverEntry(
 			CFsPostFsFilterPassThrough;
 		CFsFilterCallbacks.PreAcquireForModifiedPageWriter =
 			CFsPreFsFilterPassThrough;
-		CFsFilterCallbacks.PostAccquireForModifiedPPageWriter =
+		CFsFilterCallbacks.PostAcquireForModifiedPageWriter =
 			CFsPostFsFilterPassThrough;
 		CFsFilterCallbacks.PreReleaseForModifiedPageWriter =
 			CFsPreFsFilterPassThrough;
