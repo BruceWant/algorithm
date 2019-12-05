@@ -39,6 +39,11 @@ typedef struct _SFILTER_DEVICE_EXTENSION {
 
 
 
+#ifndef ClearFlag
+#define ClearFlag(_F,_SF)	((_F) &= ~(_SF))
+#endif
+
+
 #define IS_MY_DEVICE_OBJECT(_devObj) \
 	(((_devObj) != NULL) && \
 	 ((_devObj)->DriverObject == CFsDriverObject) && \
@@ -57,6 +62,11 @@ typedef struct _SFILTER_DEVICE_EXTENSION {
 	 	(FIELD_OFFSET(FAST_IO_DISPATCH, _FieldName) + \
 		 sizeof(void *))) && \
 		 ((_FastIoDispatchPtr)->_FieldName != NULL))
+
+#define IS_DESIRED_DEVICE_TYPE(_type) \
+	(((_type) == FILE_DEVICE_DISK_FILE_SYSTEM) || \
+	 ((_type) == FILE_DEVICE_CD_ROM_FILE_SYSTEM) || \
+	 ((_type) == FILE_DEVICE_NETWORK_FILE_SYSTEM))
 
 
 VOID CFsLoadDynamicFunctions(VOID);

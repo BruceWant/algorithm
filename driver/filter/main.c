@@ -185,8 +185,54 @@ NTSTATUS DriverEntry(
 		}
 	}
 #endif
+	status = IoRegisterFsRegistrationChange(DriverObject,
+						SfFsNotification
+						);
+	if (!NT_SUCCESS(status)) {
+		KdPrint(("SFilter!DriverEntry: Error registering FS"
+					" change notification, status="
+					"%08x\n", status));
+		DriverObject->FastIoDispatch = NULL;
+		ExFreePool(fastIoDispatch);
+		IoDeleteDevice(CFsDeviceObject);
+		return status;
+	}
 
-	deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+	PDEVICE_OBJECT rawDeviceObject;
+	PFILE_OBJECT fileObject;
+	UNICODE_STRING rawNameString;
+
+	RtlInitUnicodeString(&rawNameString,
+			     L"\\Device\\RawDisk");
+
+	status = IoGetDeviceObjectPointer(
+			&rawNameString,
+			FILE_READ_ATTRIBUTES,
+			&fileObject,
+			&rawDeviceObject
+			);
+	if (NT_SUCCESS(status)) {
+		SfFsNotification(rawDeviceObject, TRUE);
+		ObDereferenceObject(fileObject);
+	}
+
+	RtlInitUnicodeString(&rawNameString,
+			     L"\\Device\\RawCdRom");
+
+	status = IoGetDeviceObjectPointer(
+			&rawNameString,
+			FILE_READ_ATTRIBUTES,
+			&fileObject,
+			&rawDeviceObject
+			);
+
+	if (NT_SUCCESS(status)) {
+		SfFsNotification(rawDeviceObject, TRUE);
+		ObDereferenceObject(fileObject);
+	}
+
+	//deviceObject->Flags &= ~DO_DEVICE_INITIALIZING;
+	ClearFlag(deviceObject->Flags, DO_DEVICE_INITIALIZING);
 
 	KdPrint(("Driver loaded\n"));
 

@@ -928,3 +928,345 @@ VOID SfCleanupMountedDevice(
 	ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
 }
 #endif
+
+
+VOID SfFsNotification(
+		_In_ PDEVICE_OBJECT DeviceObject,
+		_In_ BOOLEAN FsActive
+		)
+{
+	UNICODE_STRING name;
+	WCHAR nameBuffer[MAX_DEVNAME_LENGTH];
+
+	PAGED_CODE();
+
+	RtlInitEmptyUnicodeString(&name,
+				  nameBuffer,
+				  sizeof(nameBuffer)
+				  );
+	SfGetObjectName(DeviceObject, &name);
+
+
+	if (FsActive) {
+		SfAttachToFileSystemDevice(DeviceObject, &name);
+	} else {
+		SfDtachFromFileSystemDevice(DeviceObject);
+	}
+}
+
+
+NTSTATUS SfAttachToFileSystemDevice(
+		_In_ PDEVICE_OBJECT DeviceObject,
+		_In_ PUNICODE_STRING DeviceName
+		)
+{
+	PDEVICE_OBJECT newDeviceObject;
+	PSFILTER_DEVICE_EXTENSION devExt;
+	UNICODE_STRING fsrecName;
+	NTSTATUS status;
+	UNICODE_STRING fsName;
+	WCHAR tempNameBuffer[MAX_DEVNAME_LENGTH];
+
+	PAGED_CODE();
+
+	if (!IS_DESIRED_DEVICE_TYPE(DeviceObject->DeviceType)) {
+		return STATUS_SUCCESS;
+	}
+
+	RtlInitEmptyUnicodeString(&fsName,
+				  tempNameBuffer,
+				  sizeof(tempNameBuffer)
+				  );
+
+	RtlInitUnicodeString(&fsrecName, L"\\FileSystem\\Fs_Rec");
+	SfGetObjectName(DeviceObject->DriverObject, &fsName);
+
+	if (!FlagOn(SfDebug, SFDEBUG_ATTACH_TO_FSRECOGNIZER)) {
+		if (RltCompareUnicodeString(&fsName,
+					&fsrecName,
+					TRUE) == 0 ) {
+			return STATUS_SUCCESS;
+		}
+	}
+
+	status = IoCreateDevice(CFsDriverObject,
+		     sizeof(SFILTER_DEVICE_EXTENSION) + gUserExtensionsize,
+		     NULL,
+		     DeviceObject->DeviceType,
+		     0,
+		     FALSE,
+		     &newDeviceObject
+		     );
+	
+	if (!NT_SUCCESS(status)) {
+		return status;
+	}
+	
+	if (!OnSfilterAttachPre(newDeviceObject,
+				DeviceObject,
+				&fsName,
+				(PVOID)(((PSFILTER_DEVICE_EXTENSION)
+						DeviceObject->
+						    DeviceExtension)->
+							UserExtension))) {
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	if (FlagOn(DeviceObject->Flags, DO_BUFFER_IO)) {
+		SetFlag(newDeviceObject->Flags, DO_BUFFER_IO);
+	}
+
+	if (FlagOn(DeviceObject->Flags, DO_DIRECT_IO)) {
+		SetFlag(newDeviceObject->Flags, DO_DIRECT_IO);
+	}
+
+	if (FlagOn(DeviceObject->Characteristics,
+				FILE_DEVICE_SECURE_OPEN)) {
+		SetFlag(newDeviceObject->Characteristics,
+				FILE_DEVICE_SECURE_OPEN);
+	}
+
+	devExt = newDeviceObject->DeviceExtension;
+	status = SfAttachDeviceToDeviceStack(newDeviceObject,
+			DeviceObject,
+			&devExt->AttachedToDeviceObject
+			);
+
+	if (!NT_SUCCESS(status)) {
+		goto ErrorCleanUpDevice;
+	}
+
+	devExt->TypeFlag = SFLT_POOL_TAG;
+	RtlInitEmptyUnicodeString(&devExt->DeviceName,
+				  devExt->DeviceNameBuffer,
+				  sizeof(devExt->DeviceNameBuffer)
+				  );
+	RtlCopyUnicodeString(&devExt->DeviceName, DeviceName);
+
+	ClearFlag(newDeviceObject->Flags, DO_DEVICE_INITIALIZING);
+
+
+#if WINVER >= 0x0501
+	if (IS_WINDOWSXP_OR_LATER()) {
+		ASSERT(NULL != CFsDynamicFunction.EnumerateDeviceObjectList
+		       && NULL != CFsDynamicFunction.GetDiskDeviceObject
+		       && NULL != CFsDynamicFunction.GetDeviceAttachmentBaseRef
+		       && NULL != CFsDynamicFunction.GetLowerDeviceObject);
+		status = SfEnumerateFileSystemVolumes(DeviceObject,
+						      &fsName);
+
+		if (!NT_SUCCESS(status)) {
+			IoDetachDevice(devExt->AttachedToDeviceObject);
+			goto ErrorCleanupDevice;
+		}
+	}
+#endif
+	OnSfilterAttachPost(newDeviceObject,
+			DeviceObject,
+			devExt->AttachedToDeviceObject,
+			(PVOID)(((PSFILTER_DEVICE_EXTENSION)
+					DeviceObject->DeviceExtension)->
+						UserExtension),
+			STATUS_SUCCESS);
+	return STATUS_SUCCESS;
+
+	ErrorCleanupDevice:
+		SfCleanupMountedDevice(newDeviceObject);
+		IoDeleteDevice(newDeviceObject);
+		OnSfilterAttachPost(newDeviceObject,
+				DeviceObject,
+				NULL,
+				(PVOID)(((PSFILTER_DEVICE_EXTENSION)
+					DeviceObject->DeviceExtension)->
+					UserExtension),
+				status);
+	return status;
+}
+
+VOID SfDetachFromFileSystemDevice(
+		_In_ PDEVICE_OBJECT DeviceObject
+		)
+{
+	PDEVICE_OBJECT ourAttachedDevice;
+	PSFILTER_DEVICE_EXTENSION devExt;
+
+	PAGED_CODE();
+
+	ourAttachedDevice = DeviceObject->AttachedDevice;
+
+	while (NULL != ourAttachedDevice) {
+		if (IS_MY_DEVICE_OBJECT(ourAttachedDevice)) {
+			dexExt = ourAttachedDevice->DeviceExtension;
+
+			SfCleanupMountedDevice(ourAttachedDevice);
+			IoDetachDevice(DeviceObject);
+			IoDeleteDevice(ourAttachedDevice);
+
+			return;
+		}
+
+		DeviceObject = ourAttachedDevice;
+		ourAttachedDevice = ourAttachedDevice->AttachedDevice;
+	}
+}
+
+
+#if WINVER >= 0x0501
+NTSTATUS SfEnumerateFileSystemVolumes(
+		_In_ PDEVICE_OBJECT FSDeviceObject,
+		_In_ PUNICODE_STRING Name
+		)
+{
+	PDEVICE_OBJECT newDeviceObject;
+	PSFILTER_DEVICE_EXTENSION newDevExt;
+	PDEVICE_OBJECT *devList;
+	PDEVICE_OBJECT storageStackDeviceObject;
+	NTSTATUS status;
+	ULONG numDevices;
+	ULONG i;
+	BOOLEAN isShadowCopyVolume;
+
+	PAGED_CODE();
+
+	status = (CFsDynamicFunctions.EnumerateDeviceObjectList)(
+			FSDeviceObject->DriverObject,
+			NULL,
+			0,
+			&numDevices
+			);
+
+	if (!NT_SUCCESS(status)) {
+		ASSERT(STATUS_BUFFER_TOO_SMALL == status);
+
+		numDevices += 8;
+
+		devList = ExAllocatePoolWithTag(NonPagePool,
+				(numDevices * sizeof(PDEVICE_OBJECT)),
+				SFLT_POOL_TAG);
+		if (NULL == devList) {
+			return STATUS_INSUFFICIENT_RESOURCES;
+		}
+		
+		ASSERT(NULL != CFsDynamicFunctions.EnumerateDeviceObjectList);
+		status = (CFsDynamicFunctions.EnumberateDeviceObjectList)(
+				FSDeviceObject->DriverObject,
+				devList,
+				(numDevices * sizeof(PDEVICE_OBJECT)),
+				&numDevices
+				);
+
+		if (!NT_SUCCESS(status)) {
+			ExFreePool(devList);
+			return status;
+		}
+
+		for (i = 0; i < numDevices; i++) {
+			storageStackDeviceObject = NULL;
+
+			try {
+				if ((devList[i] = FSDeviceObject) ||
+					(devList[i]->DeviceType !=
+					    FSDeviceObject->DeviceType) ||
+					SfIsAttachedToDevice(devList[i],
+							     NULL)) {
+					leave;
+				}
+
+				SfGetBaseDeviceObjectName(devList[i],
+							  Name);
+				if (Name->Length > 0) {
+					leave;
+				}
+				ASSERT(NULL != CFsDynamicFunctions.
+						GetDiskDeviceObject);
+				status = (CFsDynamicFunctions.
+						GetDiskDeviceObject)(
+							devList[i],
+							&storageStackDeviceObject);
+				if (!NT_SUCCESS(status)) {
+					leave;
+				}
+
+				status = SfIsShadowCopyVolume(
+						StorageStackDeviceObject,
+						&isShadowCopyVolume);
+
+				if (NT_SUCCESS(status) &&
+				    isShadowCopyVolume &&
+				    !FlagOn(SfDebug, SFDEBUG_ATTACHED_TO_SHADOWN_COPIES)) {
+					UNICODE_STRING shadowDeviceName;
+					WCHAR shadowNameBuffer[MAX_DEVNAME_LENGTH];
+
+					RtlInitEmptyUnicodeString(
+							&shadowDeviceName,
+							shadowNameBuffer,
+							sizeof(shadowNameBuffer));
+					SfGetObjectName(
+						StorageStackDeviceObject,
+						&shadowDeviceName);
+
+					leave;
+				}
+
+				status = IoCreateDevice(
+						CFsDriverObject,
+						sizeof(SFILTER_DEVICE_EXTENSION) + gUserExtensionSize,
+						NULL,
+						devList[i]->DeviceType,
+						0,
+						FALSE,
+						&newDeviceObject);
+
+				if (!NT_SUCCESS(status)) {
+					leave;
+				}
+
+				newDevExt = newDeviceObjet->DeviceExtension;
+				newDevExt->TypeFlag = SFLT_POOL_TAG;
+				newDevExt->StorageStackDeviceObject =
+					storageStackDeviceObject;
+
+
+				RtlInitEmptyUnicodeString(
+						&newDevExt->DeviceName,
+						newDevExt->DeviceNameBuffer,
+						sizeof(newDevExt->DeviceNameBuffer));
+
+				SfGetObjectName(storageStackDeviceObject,
+						&newDevExt->DeviceName);
+
+				ExAcquireFastMutex(&gSfilterAttachLock);
+
+				if (!SfIoAttachedToDevice(devList[i],
+							NULL)) {
+					status = SfAttachedToMountedDevice(
+							devList[i],
+							newDeviceObject);
+					if (!NT_SUCCESS(status)) {
+						SfCleanupMountedDevice(
+								newDeviceObject);
+						IoDeleteDevice(newDeviceObject);
+					} else {
+						SfCleanupMountedDevice(
+							newDeviceObject);
+						IoDeleteDevice(
+							newDeviceObject);
+					}
+
+					ExReleaseFastMutex(&gSfilterAttacheLock);
+				}
+			} finally {
+				if (storageStackDeviceObject != NULL ) {
+					ObDereferenceObject(
+						storageStackDeviceObject);
+				}
+				ObDereferenceObject(devList[i]);
+			}
+		}
+		status = STATUS_SUCCESS;
+
+		ExFreePool(devList);
+	}
+	return status;
+}
+#endif
