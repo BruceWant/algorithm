@@ -1,6 +1,7 @@
 #include "include/fsapi.h"
 
 
+ULONG gUserExtensionSize = 0;
 
 
 BOOLEAN SfFastIoCheckIfPossible(
@@ -950,7 +951,7 @@ VOID SfFsNotification(
 	if (FsActive) {
 		SfAttachToFileSystemDevice(DeviceObject, &name);
 	} else {
-		SfDtachFromFileSystemDevice(DeviceObject);
+		SfDetachFromFileSystemDevice(DeviceObject);
 	}
 }
 
@@ -982,7 +983,7 @@ NTSTATUS SfAttachToFileSystemDevice(
 	SfGetObjectName(DeviceObject->DriverObject, &fsName);
 
 	if (!FlagOn(SfDebug, SFDEBUG_ATTACH_TO_FSRECOGNIZER)) {
-		if (RltCompareUnicodeString(&fsName,
+		if (RtlCompareUnicodeString(&fsName,
 					&fsrecName,
 					TRUE) == 0 ) {
 			return STATUS_SUCCESS;
@@ -990,7 +991,7 @@ NTSTATUS SfAttachToFileSystemDevice(
 	}
 
 	status = IoCreateDevice(CFsDriverObject,
-		     sizeof(SFILTER_DEVICE_EXTENSION) + gUserExtensionsize,
+		     sizeof(SFILTER_DEVICE_EXTENSION) + gUserExtensionSize,
 		     NULL,
 		     DeviceObject->DeviceType,
 		     0,
@@ -1012,8 +1013,8 @@ NTSTATUS SfAttachToFileSystemDevice(
 		return STATUS_UNSUCCESSFUL;
 	}
 
-	if (FlagOn(DeviceObject->Flags, DO_BUFFER_IO)) {
-		SetFlag(newDeviceObject->Flags, DO_BUFFER_IO);
+	if (FlagOn(DeviceObject->Flags, DO_BUFFERED_IO)) {
+		SetFlag(newDeviceObject->Flags, DO_BUFFERED_IO);
 	}
 
 	if (FlagOn(DeviceObject->Flags, DO_DIRECT_IO)) {
@@ -1033,7 +1034,7 @@ NTSTATUS SfAttachToFileSystemDevice(
 			);
 
 	if (!NT_SUCCESS(status)) {
-		goto ErrorCleanUpDevice;
+		goto ErrorCleanupDevice;
 	}
 
 	devExt->TypeFlag = SFLT_POOL_TAG;
@@ -1048,10 +1049,10 @@ NTSTATUS SfAttachToFileSystemDevice(
 
 #if WINVER >= 0x0501
 	if (IS_WINDOWSXP_OR_LATER()) {
-		ASSERT(NULL != CFsDynamicFunction.EnumerateDeviceObjectList
-		       && NULL != CFsDynamicFunction.GetDiskDeviceObject
-		       && NULL != CFsDynamicFunction.GetDeviceAttachmentBaseRef
-		       && NULL != CFsDynamicFunction.GetLowerDeviceObject);
+		ASSERT(NULL != CFsDynamicFunctions.EnumerateDeviceObjectList
+		       && NULL != CFsDynamicFunctions.GetDiskDeviceObject
+		       && NULL != CFsDynamicFunctions.GetDeviceAttachmentBaseRef
+		       && NULL != CFsDynamicFunctions.GetLowerDeviceObject);
 		status = SfEnumerateFileSystemVolumes(DeviceObject,
 						      &fsName);
 
@@ -1096,7 +1097,7 @@ VOID SfDetachFromFileSystemDevice(
 
 	while (NULL != ourAttachedDevice) {
 		if (IS_MY_DEVICE_OBJECT(ourAttachedDevice)) {
-			dexExt = ourAttachedDevice->DeviceExtension;
+			devExt = ourAttachedDevice->DeviceExtension;
 
 			SfCleanupMountedDevice(ourAttachedDevice);
 			IoDetachDevice(DeviceObject);
@@ -1140,7 +1141,7 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 
 		numDevices += 8;
 
-		devList = ExAllocatePoolWithTag(NonPagePool,
+		devList = ExAllocatePoolWithTag(NonPagedPool,
 				(numDevices * sizeof(PDEVICE_OBJECT)),
 				SFLT_POOL_TAG);
 		if (NULL == devList) {
@@ -1148,7 +1149,7 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 		}
 		
 		ASSERT(NULL != CFsDynamicFunctions.EnumerateDeviceObjectList);
-		status = (CFsDynamicFunctions.EnumberateDeviceObjectList)(
+		status = (CFsDynamicFunctions.EnumerateDeviceObjectList)(
 				FSDeviceObject->DriverObject,
 				devList,
 				(numDevices * sizeof(PDEVICE_OBJECT)),
@@ -1188,12 +1189,12 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 				}
 
 				status = SfIsShadowCopyVolume(
-						StorageStackDeviceObject,
+					storageStackDeviceObject,
 						&isShadowCopyVolume);
 
 				if (NT_SUCCESS(status) &&
 				    isShadowCopyVolume &&
-				    !FlagOn(SfDebug, SFDEBUG_ATTACHED_TO_SHADOWN_COPIES)) {
+				    !FlagOn(SfDebug, SFDEBUG_ATTACH_TO_SHADOW_COPIES)) {
 					UNICODE_STRING shadowDeviceName;
 					WCHAR shadowNameBuffer[MAX_DEVNAME_LENGTH];
 
@@ -1202,7 +1203,7 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 							shadowNameBuffer,
 							sizeof(shadowNameBuffer));
 					SfGetObjectName(
-						StorageStackDeviceObject,
+						storageStackDeviceObject,
 						&shadowDeviceName);
 
 					leave;
@@ -1221,7 +1222,7 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 					leave;
 				}
 
-				newDevExt = newDeviceObjet->DeviceExtension;
+				newDevExt = newDeviceObject->DeviceExtension;
 				newDevExt->TypeFlag = SFLT_POOL_TAG;
 				newDevExt->StorageStackDeviceObject =
 					storageStackDeviceObject;
@@ -1237,9 +1238,9 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 
 				ExAcquireFastMutex(&gSfilterAttachLock);
 
-				if (!SfIoAttachedToDevice(devList[i],
+				if (!SfIsAttachedToDevice(devList[i],
 							NULL)) {
-					status = SfAttachedToMountedDevice(
+					status = SfAttachToMountedDevice(
 							devList[i],
 							newDeviceObject);
 					if (!NT_SUCCESS(status)) {
@@ -1253,7 +1254,7 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 							newDeviceObject);
 					}
 
-					ExReleaseFastMutex(&gSfilterAttacheLock);
+					ExReleaseFastMutex(&gSfilterAttachLock);
 				}
 			} finally {
 				if (storageStackDeviceObject != NULL ) {
@@ -1269,4 +1270,382 @@ NTSTATUS SfEnumerateFileSystemVolumes(
 	}
 	return status;
 }
+
+
+VOID SfFsNotivication(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ BOOLEAN FsActive
+)
+{
+	UNICODE_STRING name;
+	WCHAR nameBuffer[MAX_DEVNAME_LENGTH];
+
+	PAGED_CODE();
+
+	RtlInitEmptyUnicodeString(&name, nameBuffer, sizeof(nameBuffer));
+
+	SfGetObjectName(DeviceObject, &name);
+
+	if (FsActive) {
+		SfAttachToFileSystemDevice(DeviceObject, &name);
+	}
+	else {
+		SfDetachFromFileSystemDevice(DeviceObject);
+	}
+
+}
+
+
+VOID SfGetObjectName(
+	_In_ PVOID Object,
+	_Inout_ PUNICODE_STRING Name
+)
+{
+	NTSTATUS status;
+	CHAR nibuf[512];
+
+	POBJECT_NAME_INFORMATION nameInfo = (POBJECT_NAME_INFORMATION)nibuf;
+	ULONG retLength;
+
+	status = ObQueryNameString(Object,
+		nameInfo,
+		sizeof(nibuf),
+		&retLength);
+
+	Name->Length = 0;
+	if (NT_SUCCESS(status)) {
+		RtlCopyUnicodeString(Name,
+			&nameInfo->Name);
+	}
+}
+
+
+NTSTATUS SfAttachDeviceToDeviceStack(
+	_In_ PDEVICE_OBJECT SourceDevice,
+	_In_ PDEVICE_OBJECT TargetDevice,
+	_Inout_ PDEVICE_OBJECT* AttachedToDeviceObject
+)
+{
+	PAGED_CODE();
+
+#if WINVER >= 0x0501
+	if (IS_WINDOWSXP_OR_LATER()) {
+		ASSERT(NULL != CFsDynamicFunctions.AttachDeviceToDeviceStackSafe);
+
+		return (CFsDynamicFunctions.AttachDeviceToDeviceStackSafe)(
+			SourceDevice,
+			TargetDevice,
+			AttachedToDeviceObject
+			);
+	}
+	else {
+#endif
+		*AttachedToDeviceObject = TargetDevice;
+		*AttachedToDeviceObject = IoAttachDeviceToDeviceStack(
+			SourceDevice,
+			TargetDevice
+		);
+
+		if (*AttachedToDeviceObject == NULL) {
+			return STATUS_NO_SUCH_DEVICE;
+		}
+
+		return STATUS_SUCCESS;
+#if WINVER >= 0x0501
+	}
+#endif
+}
+
+
+BOOLEAN SfIsAttachedToDevice(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+)
+{
+	PAGED_CODE();
+
+#if WINVER >= 0x0501
+	if (IS_WINDOWSXP_OR_LATER()) {
+		ASSERT(NULL != CFsDynamicFunctions.GetLowerDeviceObject &&
+			NULL != CFsDynamicFunctions.GetDeviceAttachmentBaseRef);
+
+		return SfIsAttachedToDeviceWXPAndLater(DeviceObject,
+			AttachedDeviceObject);
+	}
+	else {
+#endif
+		return SfIsAttachedToDeviceW2K(DeviceObject,
+			AttachedDeviceObject);
+#if WINVER >= 0x0501
+	}
+#endif
+}
+
+#if WINVER >= 0x0501
+VOID SfGetBaseDeviceObjectName(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_Inout_ PUNICODE_STRING Name
+)
+{
+	ASSERT(NULL != CFsDynamicFunctions.GetDeviceAttachmentBaseRef);
+	DeviceObject = (CFsDynamicFunctions.GetDeviceAttachmentBaseRef)(
+		DeviceObject);
+
+	SfGetObjectName(DeviceObject, Name);
+
+	ObDereferenceObject(DeviceObject);
+}
+#endif
+
+
+NTSTATUS SfIsShadowCopyVolume(
+	_In_ PDEVICE_OBJECT StorageStackDeviceObject,
+	_Out_ PBOOLEAN IsShadowCopy
+)
+{
+	PAGED_CODE();
+
+	*IsShadowCopy = FALSE;
+
+#if WINVER >= 0x0501
+	if (IS_WINDOWS2000()) {
+#endif
+		UNREFERENCED_PARAMETER(StorageStackDeviceObject);
+		return STATUS_SUCCESS;
+#if WINVER >= 0x0501
+	}
+
+	if (IS_WINDOWSXP()) {
+		UNICODE_STRING volSnapDriverName;
+		WCHAR buffer[MAX_DEVNAME_LENGTH];
+		PUNICODE_STRING storageDriverName;
+		ULONG returnedLength;
+		NTSTATUS status;
+
+		if (FILE_DEVICE_DISK != StorageStackDeviceObject->
+			DeviceType)
+		{
+			return STATUS_SUCCESS;
+		}
+
+		storageDriverName = (PUNICODE_STRING)buffer;
+		RtlInitEmptyUnicodeString(storageDriverName,
+			Add2Ptr(storageDriverName,
+				sizeof(UNICODE_STRING)),
+			sizeof(buffer) - sizeof(UNICODE_STRING));
+
+		status = ObQueryNameString(StorageStackDeviceObject,
+			(POBJECT_NAME_INFORMATION)storageDriverName,
+			storageDriverName->MaximumLength,
+			&returnedLength);
+
+		if (!NT_SUCCESS(status)) {
+			return status;
+		}
+
+		RtlInitUnicodeString(&volSnapDriverName,
+			L"\\Driver\\VolSnap");
+
+		if (RtlEqualUnicodeString(storageDriverName,
+			&volSnapDriverName,
+			TRUE)) {
+			*IsShadowCopy = TRUE;
+		}
+		else {
+			NOTHING;
+		}
+
+		return STATUS_SUCCESS;
+	}
+	else {
+		PIRP irp;
+		KEVENT event;
+		IO_STATUS_BLOCK iosb;
+		NTSTATUS status;
+
+		if (FILE_DEVICE_VIRTUAL_DISK != StorageStackDeviceObject->
+			DeviceType) {
+			return STATUS_SUCCESS;
+		}
+
+		KeInitializeEvent(&event,
+			NotificationEvent,
+			FALSE);
+
+		irp = IoBuildDeviceIoControlRequest(
+			IOCTL_DISK_IS_WRITABLE,
+			StorageStackDeviceObject,
+			NULL,
+			0,
+			NULL,
+			0,
+			FALSE,
+			&event,
+			&iosb);
+
+		if (irp == NULL) {
+			return STATUS_INSUFFICIENT_RESOURCES;
+		}
+
+		status = IoCallDriver(StorageStackDeviceObject, irp);
+
+		if (status == STATUS_PENDING) {
+			(VOID)KeWaitForSingleObject(&event,
+				Executive,
+				KernelMode,
+				FALSE,
+				NULL);
+			status = iosb.Status;
+		}
+
+		if (STATUS_MEDIA_WRITE_PROTECTED == status) {
+			*IsShadowCopy = TRUE;
+			status = STATUS_SUCCESS;
+		}
+
+		return status;
+	}
+#endif
+}
+
+
+NTSTATUS SfAttachToMountedDevice(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PDEVICE_OBJECT SFilterDeviceObject
+)
+{
+	PSFILTER_DEVICE_EXTENSION newDevExt =
+		SFilterDeviceObject->DeviceExtension;
+	NTSTATUS status;
+	ULONG i;
+
+	PAGED_CODE();
+	ASSERT(IS_MY_DEVICE_OBJECT(SFilterDeviceObject));
+#if WINVER >= 0x0501
+	ASSERT(!SfIsAttachedToDevice(DeviceObject, NULL));
+#endif
+	if (!OnSfilterAttachPre(SFilterDeviceObject,
+		DeviceObject,
+		NULL,
+		(PVOID)(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+			DeviceExtension)->UserExtension))) {
+		return STATUS_UNSUCCESSFUL;
+	}
+
+	if (FlagOn(DeviceObject->Flags, DO_BUFFERED_IO)) {
+		SetFlag(SFilterDeviceObject->Flags, DO_BUFFERED_IO);
+	}
+
+	if (FlagOn(DeviceObject->Flags, DO_DIRECT_IO)) {
+		SetFlag(SFilterDeviceObject->Flags, DO_DIRECT_IO);
+	}
+
+	for (i = 0; i < 8; i++) {
+		LARGE_INTEGER interval;
+
+		status = SfAttachDeviceToDeviceStack(SFilterDeviceObject,
+			DeviceObject,
+			&newDevExt->AttachedToDeviceObject);
+		if (NT_SUCCESS(status)) {
+			OnSfilterAttachPost(
+				SFilterDeviceObject,
+				DeviceObject,
+				newDevExt->AttachedToDeviceObject,
+				(PVOID)(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+					DeviceExtension)->UserExtension),
+				status
+			);
+
+			ClearFlag(SFilterDeviceObject->Flags,
+				DO_DEVICE_INITIALIZING);
+
+			return STATUS_SUCCESS;
+		}
+
+		interval.QuadPart = (500 * DELAY_ONE_MILLISECOND);
+
+		KeDelayExecutionThread(KernelMode, FALSE, &interval);
+	}
+	OnSfilterAttachPost(
+		SFilterDeviceObject,
+		DeviceObject,
+		NULL,
+		(PVOID)(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+			DeviceExtension)->UserExtension),
+		status);
+
+	return status;
+}
+
+
+#if WINVER >= 0x0501
+BOOLEAN SfIsAttachedToDeviceWXPAndLater(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+)
+{
+	PDEVICE_OBJECT currentDevObj;
+	PDEVICE_OBJECT nextDevObj;
+
+	PAGED_CODE();
+
+	ASSERT(NULL != CFsDynamicFunctions.GetAttachedDeviceReference);
+	currentDevObj = (CFsDynamicFunctions.GetAttachedDeviceReference)(
+		DeviceObject);
+
+	do {
+		if (IS_MY_DEVICE_OBJECT(currentDevObj)) {
+			if (ARGUMENT_PRESENT(AttachedDeviceObject)) {
+				*AttachedDeviceObject = currentDevObj;
+			}
+			else {
+				ObDereferenceObject(currentDevObj);
+			}
+			return TRUE;
+		}
+
+		ASSERT(NULL != CFsDynamicFunctions.GetLowerDeviceObject);
+		nextDevObj = (CFsDynamicFunctions.GetLowerDeviceObject)(
+			currentDevObj);
+
+		ObDereferenceObject(currentDevObj);
+
+		currentDevObj = nextDevObj;
+	} while (NULL != currentDevObj);
+
+	if (ARGUMENT_PRESENT(AttachedDeviceObject)) {
+		*AttachedDeviceObject = NULL;
+	}
+	return FALSE;
+}
+#endif
+
+BOOLEAN SfIsAttachedToDeviceW2K(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+)
+{
+	PDEVICE_OBJECT currentDevice;
+
+	PAGED_CODE();
+
+	for (currentDevice = DeviceObject;
+		currentDevice != NULL;
+		currentDevice = currentDevice->AttachedDevice) {
+		
+		if (IS_MY_DEVICE_OBJECT(currentDevice)) {
+			if (ARGUMENT_PRESENT(AttachedDeviceObject)) {
+				ObReferenceObject(currentDevice);
+				*AttachedDeviceObject = currentDevice;
+			}
+			return TRUE;
+		}
+	}
+
+	if (ARGUMENT_PRESENT(AttachedDeviceObject)) {
+		*AttachedDeviceObject = NULL;
+	}
+	return FALSE;
+}
+
 #endif

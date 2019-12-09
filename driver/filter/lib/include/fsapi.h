@@ -4,7 +4,18 @@
 #include <ntifs.h>
 #include <ntdddisk.h>
 #include <wdmsec.h>
+#include "dynimp.h"
+#include ".\\include\\extern.h"
 
+
+typedef enum {
+	SF_IRP_GO_ON = 0,
+	SF_ERP_COMPLETED = 1,
+	SF_IRP_PASS = 2
+} SF_RET;
+
+
+FAST_MUTEX gSfilterAttachLock;
 
 PDRIVER_OBJECT CFsDriverObject;
 
@@ -15,10 +26,21 @@ ULONG gCFsOsMinorVersion;
 
 #define SFLT_POOL_TAG 'tlFs'
 
+#define SFDEBUG_ATTACH_TO_FSRECOGNIZER		0x00000010
+#define SFDEBUG_ATTACH_TO_SHADOW_COPIES		0x00000020
 
 #define FS_DEVICE_SHORT_NAME L"Fsfilter"
 #define CFS_DEVICE_NAME (L"\\Device\\" FS_DEVICE_SHORT_NAME) 
 #define CFS_POOL_TAG	'tlFS'
+
+#define DELAY_ONE_MICROSECOND	(-10)
+#define DELAY_ONE_MILLISECOND	(DELAY_ONE_MICROSECOND*1000)
+#define DELAY_ONE_SECOND		(DELAY_ONE_MILLISECOND*1000)
+
+
+extern ULONG SfDebug;
+
+extern ULONG gUserExtensionSize;
 
 
 #define MAX_DEVNAME_LENGTH 64
@@ -38,6 +60,17 @@ typedef struct _SFILTER_DEVICE_EXTENSION {
 } SFILTER_DEVICE_EXTENSION, * PSFILTER_DEVICE_EXTENSION;
 
 
+#ifndef FlagOn
+#define FlagOn(_F,_SF)		((_F)) & (_SF))
+#endif
+
+#ifndef BooleanFlagOn
+#define BooleanFlagOn(F,SF)		((BOOLEAN)(((F) & (SF)) != 0))
+#endif
+
+#ifndef SetFlag
+#define SetFlag(_F, _SF)		((_F) |= (_SF))
+#endif
 
 #ifndef ClearFlag
 #define ClearFlag(_F,_SF)	((_F) &= ~(_SF))
@@ -69,13 +102,33 @@ typedef struct _SFILTER_DEVICE_EXTENSION {
 	 ((_type) == FILE_DEVICE_NETWORK_FILE_SYSTEM))
 
 
+#define IS_WINDOWS2000() \
+	((gCFsOsMajorVersion == 5) && (gCFsOsMinorVersion == 0))
+
+#define IS_WINDOWSXP() \
+	((gCFsOsMajorVersion == 5) && (gCFsOsMinorVersion == 1))
+
+#define IS_WINDOWSXP_OR_LATER() \
+	(((gCFsOsMajorVersion == 5) && (gCFsOsMinorVersion >= 1)) || \
+	(gCFsOsMajorVersion > 5))
+
+#define IS_WINDOWSSRV2003_OR_LATER() \
+	(((gCFsOsMajorVersion == 5) && (gCFsOsMinorVersion >= 2)) || \
+	(gCFsOsMajorVersion > 5))
+
+
+#ifndef Add2Ptr
+#define Add2Ptr(P,I)	((PVOID)((PUCHAR)(P) + (I)))
+#endif
+
+
 VOID CFsLoadDynamicFunctions(VOID);
 VOID CFsGetCurrentVersion(VOID);
 VOID CFsReadDriverParameters(
 	_In_ PUNICODE_STRING RegistryPath
 );
 
-BOOLEAN SfFastIoCheckIfPossible(
+extern BOOLEAN SfFastIoCheckIfPossible(
 	_In_ PFILE_OBJECT FileObject,
 	_In_ PLARGE_INTEGER FileOffset,
 	_In_ ULONG Length,
@@ -302,11 +355,80 @@ VOID CFsPostFsFilterPassThrough(
 
 #endif
 
-
+VOID SfFsNotification(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ BOOLEAN FsActive
+);
 
 VOID SfCleanupMountedDevice(
 	_In_ PDEVICE_OBJECT DeviceObject
 );
 
+
+VOID SfGetObjectName(
+	_In_ PVOID Object,
+	_Inout_ PUNICODE_STRING Name
+);
+
+
+NTSTATUS SfAttachToFileSystemDevice(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PUNICODE_STRING DeviceName
+);
+
+
+VOID SfDetachFromFileSystemDevice(
+	_In_ PDEVICE_OBJECT DeviceObject
+);
+
+
+NTSTATUS SfAttachDeviceToDeviceStack(
+	_In_ PDEVICE_OBJECT SourceDevice,
+	_In_ PDEVICE_OBJECT TargetDevice,
+	_Inout_ PDEVICE_OBJECT* AttachedToDeviceObject
+);
+
+
+
+#if WINVER >= 0x0501
+NTSTATUS SfEnumerateFileSystemVolumes(
+	_In_ PDEVICE_OBJECT FSDeviceObject,
+	_In_ PUNICODE_STRING Name
+);
+#endif
+
+
+BOOLEAN SfIsAttachedToDevice(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+);
+
+
+VOID SfGetBaseDeviceObjectName(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_Inout_ PUNICODE_STRING DeviceName
+);
+
+
+NTSTATUS SfIsShadowCopyVolume(
+	_In_ PDEVICE_OBJECT StorageStackDeviceObject,
+	_Out_ PBOOLEAN IsShadowCopy
+);
+
+
+NTSTATUS SfAttachToMountedDevice(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PDEVICE_OBJECT SFilterDeviceObject
+);
+
+BOOLEAN SfIsAttachedToDeviceWXPAndLater(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+);
+
+BOOLEAN SfIsAttachedToDeviceW2K(
+	PDEVICE_OBJECT DeviceObject,
+	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
+);
 
 #endif

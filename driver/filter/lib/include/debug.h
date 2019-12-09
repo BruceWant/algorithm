@@ -3,6 +3,5 @@
 
 #include "fsapi.h"
 
-extern SfDebug;
 
 #endif

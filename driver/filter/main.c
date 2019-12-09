@@ -8,7 +8,7 @@
 
 FAST_MUTEX CFsFilterAttachLock;
 
-ULONG SfDebug = 0;
+//ULONG SfDebug = 0;
 
 
 
@@ -258,14 +258,57 @@ NTSTATUS CFsDispatchCreate(
 {
 	_Unreferenced_parameter_(DeviceObject);
 	NTSTATUS status = STATUS_SUCCESS;
-	PIO_STACK_LOCATION stackLocation;
-	PFILE_OBJECT fileObject;
-	PIO_SECURITY_CONTEXT securityContext;
-	//PKPH_CLIENT client;
+	SF_RET ret;
 
-	stackLocation = IoGetCurrentIrpStackLocation(Irp);
-	fileObject = stackLocation->FileObject;
-	securityContext = stackLocation->Parameters.Create.SecurityContext;
+	PAGED_CODE();
 
+	if (IS_MY_CONTROL_DEVICE_OBJECT(DeviceObject)) {
+		Irp->IoStatus.Status = STATUS_SUCCESS;
+		Irp->IoStatus.Information = 0;
+		IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+		return STATUS_SUCCESS;
+	}
+
+	if (!IS_MY_DEVICE_OBJECT(DeviceObject)) {
+		PVOID context = NULL;
+		ret = OnSfilterIrpPre(
+			DeviceObject,
+			NULL,
+			NULL,
+			Irp,
+			&status,
+			&context);
+		ASSERT(context == NULL);
+		ASSERT(ret == SF_ERP_COMPLETED);
+		return status;
+	}
+
+	ret = OnSfilterIrpPre(
+		DeviceObject,
+		((PSFILTER_DEVICE_EXTENSION)DeviceObject->DeviceExtension)->
+		AttachedToDeviceObject,
+		(PVOID)(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+			DeviceExtension)->UserExtension),
+		Irp,
+		&status,
+		&context);
+
+	if (ret == SF_IRP_COMPLETED)
+	{
+		return status;
+	}
+	else if (ret == SF_ERP_PASS)
+	{
+
+	}
 	return status;
 }
+
+
+
+
+
+
+
+

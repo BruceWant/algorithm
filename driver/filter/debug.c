@@ -1,5 +1,6 @@
 #include "include\\debug.h"
 
+ULONG SfDebug = 0;
 
 VOID CFsReadDriverParameters(
 	_In_ PUNICODE_STRING RegistryPath
