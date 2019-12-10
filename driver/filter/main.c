@@ -3,8 +3,11 @@
 
 
 
-
-
+typedef enum  {
+	SF_IRP_GO_ON = 0,
+	SF_IRP_COMPLETED = 1,
+	SF_IRP_PASS = 2
+}SF_RET;
 
 FAST_MUTEX CFsFilterAttachLock;
 
@@ -36,6 +39,14 @@ DRIVER_DISPATCH CFsPassThrough;
 #pragma alloc_text(PAGE, DriverEntry)
 #pragma alloc_text(PAGE, DriverUnload)
 #endif
+
+
+NTSTATUS
+SfCreateCompletion(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PIRP Irp,
+	_In_ PVOID Context
+);
 
 
 NTSTATUS DriverEntry(
@@ -239,6 +250,7 @@ NTSTATUS DriverEntry(
 	return status;
 }
 
+
 VOID DriverUnload(
 	_In_ PDRIVER_OBJECT DriverObject
 )
@@ -251,12 +263,13 @@ VOID DriverUnload(
 	KdPrint(("Driver unloaded\n"));
 }
 
+
 NTSTATUS CFsDispatchCreate(
 	_In_ PDEVICE_OBJECT DeviceObject,
 	_Inout_ PIRP Irp
 )
 {
-	_Unreferenced_parameter_(DeviceObject);
+	//_Unreferenced_parameter_(DeviceObject);
 	NTSTATUS status = STATUS_SUCCESS;
 	SF_RET ret;
 
@@ -270,8 +283,9 @@ NTSTATUS CFsDispatchCreate(
 		return STATUS_SUCCESS;
 	}
 
+	PVOID context = NULL;
 	if (!IS_MY_DEVICE_OBJECT(DeviceObject)) {
-		PVOID context = NULL;
+		
 		ret = OnSfilterIrpPre(
 			DeviceObject,
 			NULL,
@@ -280,7 +294,7 @@ NTSTATUS CFsDispatchCreate(
 			&status,
 			&context);
 		ASSERT(context == NULL);
-		ASSERT(ret == SF_ERP_COMPLETED);
+		ASSERT(ret == SF_IRP_COMPLETED);
 		return status;
 	}
 
@@ -298,13 +312,92 @@ NTSTATUS CFsDispatchCreate(
 	{
 		return status;
 	}
-	else if (ret == SF_ERP_PASS)
+	else if (ret == SF_IRP_PASS)
 	{
-
+		IoSkipCurrentIrpStackLocation(Irp);
+		return IoCallDriver(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+			DeviceExtension)->AttachedToDeviceObject,
+			Irp);
 	}
-	return status;
+	else
+	{
+		KEVENT waitEvent;
+
+		KeInitializeEvent(&waitEvent, NotificationEvent, FALSE);
+
+		IoCopyCurrentIrpStackLocationToNext(Irp);
+
+		IoSetCompletionRoutine(
+			Irp,
+			SfCreateCompletion,
+			&waitEvent,
+			TRUE,
+			TRUE,
+			TRUE
+		);
+
+		status = IoCallDriver(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+			DeviceExtension)->AttachedToDeviceObject,
+			Irp);
+
+		if (STATUS_PENDING == status) {
+			NTSTATUS localStatus = KeWaitForSingleObject(
+				&waitEvent,
+				Executive,
+				KernelMode,
+				FALSE,
+				NULL
+			);
+
+			ASSERT(STATUS_SUCCESS == localStatus);
+		}
+			ASSERT(KeReadStateEvent(&waitEvent) ||
+				!NT_SUCCESS(Irp->IoStatus.Status));
+
+			if (FlagOn(SfDebug,
+				(SFDEBUG_GET_CREATE_NAMES |
+					SFDEBUG_DISPLAY_CREATE_NAMES))) {
+				SfDisplayCreateFileName(Irp);
+			}
+
+			OnSfilterIrpPost(
+				DeviceObject,
+				((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+					DeviceExtension)->AttachedToDeviceObject,
+					(PVOID)(((PSFILTER_DEVICE_EXTENSION)DeviceObject->
+						DeviceExtension)->UserExtension),
+				Irp,
+				status,
+				context);
+
+
+			status = Irp->IoStatus.Status;
+			IoCompleteRequest(Irp, IO_NO_INCREMENT);
+
+			return status;
+	
+	}
 }
 
+
+NTSTATUS
+SfCreateCompletion(
+	_In_ PDEVICE_OBJECT DeviceObject,
+	_In_ PIRP Irp,
+	_In_ PVOID Context
+)
+{
+	PKEVENT event = Context;
+
+	UNREFERENCED_PARAMETER(DeviceObject);
+	UNREFERENCED_PARAMETER(Irp);
+
+	ASSERT(IS_MY_DEVICE_OBJECT(DeviceObject));
+
+	KeSetEvent(event, IO_NO_INCREMENT, FALSE);
+
+	return STATUS_MORE_PROCESSING_REQUIRED;
+}
 
 
 

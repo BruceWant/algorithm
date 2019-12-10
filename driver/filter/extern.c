@@ -1,4 +1,4 @@
-#include "include\\fsapi.h"
+#include "include\\extern.h"
 
 BOOLEAN OnSfilterAttachPre(
 	_In_ PDEVICE_OBJECT ourDevice,
@@ -30,4 +30,29 @@ VOID OnSfilterAttachPost(
 	UNREFERENCED_PARAMETER(theDeviceToAttached);
 	UNREFERENCED_PARAMETER(extension);
 	UNREFERENCED_PARAMETER(status);
+}
+
+
+SF_RET OnSfilterIrpPre(
+	_In_ PDEVICE_OBJECT dev,
+	_In_ PDEVICE_OBJECT next_dev,
+	_In_ PVOID extension,
+	_In_ PIRP irp,
+	_Out_ NTSTATUS* status,
+	PVOID* context)
+{
+	UNREFERENCED_PARAMETER(dev);
+	UNREFERENCED_PARAMETER(next_dev);
+	UNREFERENCED_PARAMETER(extension);
+	UNREFERENCED_PARAMETER(status);
+	UNREFERENCED_PARAMETER(context);
+
+	PIO_STACK_LOCATION irpsp = IoGetCurrentIrpStackLocation(irp);
+	PFILE_OBJECT file = irpsp->FileObject;
+
+	if (file == NULL)
+	{
+		return SF_IRP_PASS;
+	}
+	return SF_IRP_PASS;
 }
