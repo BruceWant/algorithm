@@ -1,5 +1,7 @@
 #include "include\\extern.h"
 
+
+
 BOOLEAN OnSfilterAttachPre(
 	_In_ PDEVICE_OBJECT ourDevice,
 	_In_ PDEVICE_OBJECT theDeviceToAttach,
@@ -44,8 +46,10 @@ SF_RET OnSfilterIrpPre(
 	UNREFERENCED_PARAMETER(dev);
 	UNREFERENCED_PARAMETER(next_dev);
 	UNREFERENCED_PARAMETER(extension);
-	UNREFERENCED_PARAMETER(status);
+	//UNREFERENCED_PARAMETER(status);
 	UNREFERENCED_PARAMETER(context);
+
+	*status = STATUS_SUCCESS;
 
 	PIO_STACK_LOCATION irpsp = IoGetCurrentIrpStackLocation(irp);
 	PFILE_OBJECT file = irpsp->FileObject;
@@ -55,4 +59,16 @@ SF_RET OnSfilterIrpPre(
 		return SF_IRP_PASS;
 	}
 	return SF_IRP_PASS;
+}
+
+
+VOID OnSfilterIrpPost(
+	_In_ PDEVICE_OBJECT dev,
+	_In_ PDEVICE_OBJECT next_dev,
+	_In_ PVOID extension,
+	_In_ PIRP irp,
+	_In_ NTSTATUS status,
+	PVOID context)
+{
+
 }

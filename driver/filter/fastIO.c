@@ -1648,4 +1648,135 @@ BOOLEAN SfIsAttachedToDeviceW2K(
 	return FALSE;
 }
 
+PUNICODE_STRING SfGetFileName(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ NTSTATUS CreateStatus,
+	_Inout_ PGET_NAME_CONTROL NameControl
+)
+{
+	POBJECT_NAME_INFORMATION nameInfo;
+	NTSTATUS status;
+	ULONG size;
+	ULONG bufferSize;
+
+	NameControl->allocatedBuffer = NULL;
+
+	nameInfo = (POBJECT_NAME_INFORMATION)NameControl->
+		smallBuffer;
+	bufferSize = sizeof(NameControl->smallBuffer);
+
+	status = ObQueryNameString(
+		(NT_SUCCESS(CreateStatus) ?
+		(PVOID)FileObject :
+	(PVOID)FileObject->DeviceObject),
+		nameInfo,
+		bufferSize,
+		&size
+		);
+
+	if (status == STATUS_BUFFER_OVERFLOW) {
+		bufferSize = size + sizeof(WCHAR);
+		
+		NameControl->allocatedBuffer = ExAllocatePoolWithTag(
+			NonPagedPool,
+			bufferSize,
+			SFLT_POOL_TAG
+		);
+
+		if (NULL == NameControl->allocatedBuffer) {
+			RtlInitEmptyUnicodeString(
+				(PUNICODE_STRING)&NameControl->smallBuffer,
+				(PWCHAR)(NameControl->smallBuffer + sizeof(
+					UNICODE_STRING)),
+					(USHORT)(sizeof(NameControl->smallBuffer) -
+						sizeof(UNICODE_STRING))
+			);
+			return (PUNICODE_STRING)&NameControl->smallBuffer;
+		}
+
+		nameInfo = (POBJECT_NAME_INFORMATION)NameControl->allocatedBuffer;
+
+		status = ObQueryNameString(
+			FileObject,
+			nameInfo,
+			bufferSize,
+			&size
+		);
+	}
+		if (NT_SUCCESS(status) &&
+			!NT_SUCCESS(CreateStatus)) {
+			ULONG newSize;
+			PCHAR newBuffer;
+			POBJECT_NAME_INFORMATION newNameInfo;
+
+			newSize = size + FileObject->FileName.Length;
+
+			if (NULL != FileObject->RelatedFileObject) {
+				newSize += FileObject->RelatedFileObject->FileName.Length
+					+ sizeof(WCHAR);
+			}
+
+			if (newSize > bufferSize) {
+
+				newBuffer = ExAllocatePoolWithTag(
+					NonPagedPool,
+					newSize,
+					SFLT_POOL_TAG
+				);
+
+				if (NULL == newBuffer) {
+					RtlInitEmptyUnicodeString(
+						(PUNICODE_STRING)&NameControl->smallBuffer,
+						(PWCHAR)(NameControl->smallBuffer +
+							sizeof(UNICODE_STRING)),
+							(USHORT)(sizeof(NameControl->smallBuffer) -
+								sizeof(UNICODE_STRING))
+					);
+
+					return (PUNICODE_STRING)&NameControl->smallBuffer;
+				}
+
+				newNameInfo = (POBJECT_NAME_INFORMATION)newBuffer;
+
+				RtlInitEmptyUnicodeString(
+					&newNameInfo->Name,
+					(PWCHAR)(newBuffer + sizeof(OBJECT_NAME_INFORMATION)),
+					(USHORT)(newSize - sizeof(OBJECT_NAME_INFORMATION))
+				);
+				RtlCopyUnicodeString(&newNameInfo->Name,
+					&nameInfo->Name
+				);
+
+				if (NULL != NameControl->allocatedBuffer) {
+					ExFreePool(NameControl->allocatedBuffer);
+				}
+
+				NameControl->allocatedBuffer = newBuffer;
+				bufferSize = newSize;
+				nameInfo = newNameInfo;
+			}
+			else {
+				nameInfo->Name.MaximumLength = (USHORT)(bufferSize -
+					sizeof(OBJECT_NAME_INFORMATION));
+			}
+
+			if (NULL != FileObject->RelatedFileObject) {
+				RtlAppendUnicodeStringToString(
+					&nameInfo->Name,
+					&FileObject->RelatedFileObject->FileName);
+
+				RtlAppendUnicodeToString(&nameInfo->Name, L"\\");
+			}
+
+			RtlAppendUnicodeStringToString(
+				&nameInfo->Name,
+				&FileObject->FileName
+			);
+
+			ASSERT(nameInfo->Name.Length <= nameInfo->Name.MaximumLength);
+		}
+	
+
+	return &nameInfo->Name;
+}
 #endif

@@ -3,11 +3,7 @@
 
 
 
-typedef enum  {
-	SF_IRP_GO_ON = 0,
-	SF_IRP_COMPLETED = 1,
-	SF_IRP_PASS = 2
-}SF_RET;
+
 
 FAST_MUTEX CFsFilterAttachLock;
 
@@ -400,7 +396,42 @@ SfCreateCompletion(
 }
 
 
+VOID SfDisplayCreateFileName(
+	_In_ PIRP Irp
+)
+{
+	PIO_STACK_LOCATION irpSp;
+	PUNICODE_STRING name;
+	GET_NAME_CONTROL nameControl;
 
+	irpSp = IoGetCurrentIrpStackLocation(Irp);
+
+	name = SfGetFileName(irpSp->FileObject,
+		Irp->IoStatus.Status,
+		&nameControl);
+
+	if (irpSp->Parameters.Create.Options &
+		FILE_OPEN_BY_FILE_ID) {
+		SF_LOG_PRINT(SFDEBUG_DISPLAY_CREATE_NAMES,
+			("SFilter!SfDisplayCreateFileName: Opened "
+				"%08x:%08x %wZ (FID)\n",
+				Irp->IoStatus.Status,
+				Irp->IoStatus.Information,
+				name)
+		);
+	}
+	else {
+		SF_LOG_PRINT(SFDEBUG_DISPLAY_CREATE_NAMES,
+			("SFilter!SfDisplayCreateFileName: Opened "
+				"%08x:%08x %wZ\n",
+				Irp->IoStatus.Status,
+				Irp->IoStatus.Information,
+				name)
+		);
+	}
+
+	SfGetFileNameCleanup(&nameControl);
+}
 
 
 

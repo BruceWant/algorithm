@@ -8,6 +8,19 @@
 #include ".\\include\\extern.h"
 
 
+
+#define SF_LOG_PRINT(_dbgLevel, _string)		\
+	(FlagOn(SfDebug, (_dbgLevel))) ?			\
+		DbgPrint _string :						\
+		((void)0)
+
+
+typedef struct _GET_NAME_CONTROL {
+	PCHAR allocatedBuffer;
+	CHAR smallBuffer[256];
+} GET_NAME_CONTROL, *PGET_NAME_CONTROL;
+
+
 #define SFDEBUG_DISPLAY_ATTACHEMENT_NAMES	0x00000001
 #define SFDEBUG_DISPLAY_CREATE_NAMES		0x00000002
 #define SFDEBUG_GET_CREATE_NAMES			0x00000004
@@ -433,5 +446,17 @@ BOOLEAN SfIsAttachedToDeviceW2K(
 	PDEVICE_OBJECT DeviceObject,
 	PDEVICE_OBJECT* AttachedDeviceObject OPTIONAL
 );
+
+
+VOID SfDisplayCreateFileName(
+	_In_ PIRP Irp
+);
+
+PUNICODE_STRING SfGetFileName(
+	_In_ PFILE_OBJECT FileObject,
+	_In_ NTSTATUS CreateStatus,
+	_Inout_ PGET_NAME_CONTROL NameControl
+);
+
 
 #endif
