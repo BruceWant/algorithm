@@ -17,6 +17,7 @@ void shell_sort(int *arr, int len)
         {
             for (int j = i; j > 0; j -= h)
             {
+                printf("%d-%d: %d\n", j, h, j-h);
                 if (arr[j - h] > arr[j])
                 {
                     min = arr[j - h];

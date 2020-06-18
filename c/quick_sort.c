@@ -31,6 +31,7 @@ int partition(int *arr, int lo, int hi)
             break;
         swap(&(arr[i]), &(arr[j]));
     }
+    printf("i: %d, j: %d\n", i, j);
     swap(&(arr[j]), &(arr[lo]));
 
     return j;
@@ -50,7 +51,14 @@ void sort(int *arr, int lo, int hi)
 int main()
 {
     int arr[] = {7, 1, 10, 6, 20, 1, 3, 5, 7, 9};
+    // int arr[] = {1, 0};
     int len = (int)(sizeof(arr) / sizeof(arr[0]));
+
+    for (int i = 0; i < len; i++)
+    {
+        printf("%-4d", arr[i]);
+    }
+    printf("\n");
 
     sort(arr, 0, len - 1);
 
