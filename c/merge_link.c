@@ -1,17 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
 
 
-struct ListNode
+typedef struct ListNode
 {
     int value;
-    ListNode *next;
-    ListNode(int v): value(v), next(NULL)
-    {
-    }
-};
+    struct ListNode *next;
+} ListNode;
 
 ListNode *mergeSortedList(ListNode *L1, ListNode *L2)
 {
-    ListNode dummy(-1), *p1 = &dummy, *p2 = L2;  //L1的辅助头结点dummy，因为可能在头部插入
+    ListNode dummy, *p1 = &dummy, *p2 = L2;  //L1的辅助头结点dummy，因为可能在头部插入
     dummy.next = L1;
     while(p1->next != NULL && p2 != NULL)  //停止条件，也包括了判断两个链表是否为空
     {
@@ -62,5 +61,28 @@ ListNode *listMergeSort(ListNode *head)
 
 int main()
 {
+    ListNode *head = malloc(sizeof(ListNode));
+    ListNode *tail = head, *node;
 
+    for (int i = 0; i < 10; i++)
+    {
+        node = malloc(sizeof(ListNode));
+        node->value = 10 - i;
+
+        tail->next = node;
+        tail = node;
+    }
+    tail->next = NULL;
+
+    listMergeSort(head);
+
+    node = head->next;
+    while (node != NULL)
+    {
+        printf("%d ", node->value);
+        node = node->next;
+    }
+    printf("\n");
+
+    return 0;
 }
