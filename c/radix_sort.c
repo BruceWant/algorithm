@@ -61,8 +61,10 @@ void radixSort(int * array, int size){
 int main(){
   
   
-  int size = 12;
-  int list[] = {10, 2, 303, 4021, 293, 1, 0, 429, 480, 92, 2999, 14};
+  // int size = 12;
+  // int list[] = {10, 2, 303, 4021, 293, 1, 0, 429, 480, 92, 2999, 14};
+  int list[] = {10, 9, 8, 7, 6};
+  int size = sizeof(list) / sizeof(list[0]);
   
   printArray(&list[0], size);
   
